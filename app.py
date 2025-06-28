@@ -82,3 +82,5 @@ def render():
     st.dataframe(style, use_container_width=True)
 
 # ✅ Auto-refresh every 5 seconds using streamlit_autorefresh
+st_autorefresh(interval=5000, key="refresh")
+render()
