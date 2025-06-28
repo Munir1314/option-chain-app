@@ -1,14 +1,19 @@
 import streamlit as st
 import pandas as pd
 import requests
-import time
+from streamlit_autorefresh import st_autorefresh
 
+# Page setup
 st.set_page_config(layout="wide")
 st.title("📊 Live Option Chain - NIFTY")
 
+# Auto-refresh every 5 seconds
+st_autorefresh(interval=5000, limit=None, key="refresh")
+
+# Secure token
 ACCESS_TOKEN = st.secrets["upstox"]["token"]
 INSTRUMENT_KEY = "NSE_INDEX|Nifty 50"
-EXPIRY_DATE = "2025-07-04"  # You can change it later dynamically
+EXPIRY_DATE = "2025-07-04"  # You can make this dynamic later
 STRIKE_RANGE = st.slider("Strike Range (+/- from ATM)", 5, 30, 10)
 
 def fetch_option_chain():
@@ -57,7 +62,8 @@ def build_dataframe(chain_data):
 def highlight_support_resistance(df, side):
     for col in [f"{side}_oi", f"{side}_volume", f"{side}_oi_chg"]:
         top3 = df[col].nlargest(3).index
-        for idx, color in zip(top3, ["red", "orange", "yellow"] if side == "call" else ["green", "yellowgreen", "lightyellow"]):
+        colors = ["red", "orange", "yellow"] if side == "call" else ["green", "yellowgreen", "lightyellow"]
+        for idx, color in zip(top3, colors):
             df.at[idx, f"{side}_highlight"] = color
     return df
 
@@ -74,14 +80,11 @@ def render():
     df = highlight_support_resistance(df, "call")
     df = highlight_support_resistance(df, "put")
 
-    style = df.style.applymap(lambda v: "", subset=["strike_price"])
+    style = df.style
     for side in ["call", "put"]:
         for col in df.columns:
             style = style.apply(lambda row: apply_colors(row, col, side), axis=1, subset=[col])
 
     st.dataframe(style, use_container_width=True)
 
-# Auto-refresh every 5 seconds
-st_autorefresh = st.experimental_rerun
-st.experimental_singleton(lambda: time.sleep(5))()
 render()
