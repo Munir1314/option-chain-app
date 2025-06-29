@@ -21,7 +21,7 @@ def fetch_option_chain():
     if response.status_code == 200:
         return response.json().get("data", [])
     else:
-        st.error("Failed to fetch data")
+        st.error(f"Failed to fetch data. Status: {response.status_code}")
         return []
 
 def build_dataframe(chain_data):
@@ -51,13 +51,13 @@ def build_dataframe(chain_data):
     put_df = pd.DataFrame(puts.tolist())
 
     final_df = pd.concat([call_df, df["strike_price"], put_df], axis=1)
-
     return final_df.sort_values("strike_price")
 
 def highlight_support_resistance(df, side):
     for col in [f"{side}_oi", f"{side}_volume", f"{side}_oi_chg"]:
         top3 = df[col].nlargest(3).index
-        for idx, color in zip(top3, ["red", "orange", "yellow"] if side == "call" else ["green", "yellowgreen", "lightyellow"]):
+        colors = ["red", "orange", "yellow"] if side == "call" else ["green", "yellowgreen", "lightyellow"]
+        for idx, color in zip(top3, colors):
             df.at[idx, f"{side}_highlight"] = color
     return df
 
@@ -82,5 +82,7 @@ def render():
     st.dataframe(style, use_container_width=True)
 
 # ✅ Auto-refresh every 5 seconds using streamlit_autorefresh
-st_autorefresh(interval=5000, key="refresh")
+st_autorefresh(interval=5000, limit=None, key="refresh")
+
+# 👇 Main function call
 render()
