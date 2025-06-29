@@ -8,7 +8,7 @@ st.title("📊 Live Option Chain - NIFTY")
 
 ACCESS_TOKEN = st.secrets["upstox"]["token"]
 INSTRUMENT_KEY = "NSE_INDEX|Nifty 50"
-EXPIRY_DATE = "2025-07-03"  # ✅ Corrected expiry
+EXPIRY_DATE = "2025-07-03"  # ✅ Corrected expiry date
 STRIKE_RANGE = st.slider("Strike Range (+/- from ATM)", 5, 30, 10)
 
 def fetch_option_chain():
@@ -61,9 +61,6 @@ def highlight_support_resistance(df, side):
             df.at[idx, f"{side}_highlight"] = color
     return df
 
-def apply_colors(row, col, side):
-    return f"background-color: {row.get(f'{side}_highlight', '')}" if col.startswith(f"{side}_") else ""
-
 def render():
     chain = fetch_option_chain()
     if not chain:
@@ -74,10 +71,18 @@ def render():
     df = highlight_support_resistance(df, "call")
     df = highlight_support_resistance(df, "put")
 
-    style = df.style.applymap(lambda v: "", subset=["strike_price"])
-    for side in ["call", "put"]:
+    def style_row(row):
+        styled_row = []
         for col in df.columns:
-            style = style.apply(lambda row: apply_colors(row, col, side), axis=1, subset=[col])
+            if col.startswith("call_") and f"call_highlight" in row:
+                styled_row.append(f"background-color: {row['call_highlight']}" if not pd.isna(row['call_highlight']) else "")
+            elif col.startswith("put_") and f"put_highlight" in row:
+                styled_row.append(f"background-color: {row['put_highlight']}" if not pd.isna(row['put_highlight']) else "")
+            else:
+                styled_row.append("")
+        return styled_row
+
+    style = df.style.apply(style_row, axis=1)
 
     st.dataframe(style, use_container_width=True)
 
