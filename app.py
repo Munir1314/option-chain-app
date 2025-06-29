@@ -8,7 +8,7 @@ st.title("📊 Live Option Chain - NIFTY")
 
 ACCESS_TOKEN = st.secrets["upstox"]["token"]
 INSTRUMENT_KEY = "NSE_INDEX|Nifty 50"
-EXPIRY_DATE = "2025-07-04"  # You can change it later dynamically
+EXPIRY_DATE = "2025-07-04"
 STRIKE_RANGE = st.slider("Strike Range (+/- from ATM)", 5, 30, 10)
 
 def fetch_option_chain():
@@ -21,7 +21,7 @@ def fetch_option_chain():
     if response.status_code == 200:
         return response.json().get("data", [])
     else:
-        st.error(f"Failed to fetch data. Status: {response.status_code}")
+        st.error("Failed to fetch data.")
         return []
 
 def build_dataframe(chain_data):
@@ -81,8 +81,7 @@ def render():
 
     st.dataframe(style, use_container_width=True)
 
-# ✅ Auto-refresh every 5 seconds using streamlit_autorefresh
+# ✅ Auto-refresh every 5 seconds
 st_autorefresh(interval=5000, limit=None, key="refresh")
 
-# 👇 Main function call
 render()
