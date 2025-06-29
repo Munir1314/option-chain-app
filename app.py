@@ -8,7 +8,7 @@ st.title("📊 Live Option Chain - NIFTY")
 
 ACCESS_TOKEN = st.secrets["upstox"]["token"]
 INSTRUMENT_KEY = "NSE_INDEX|Nifty 50"
-EXPIRY_DATE = "2025-07-04"
+EXPIRY_DATE = "2025-07-03"  # ✅ Corrected expiry
 STRIKE_RANGE = st.slider("Strike Range (+/- from ATM)", 5, 30, 10)
 
 def fetch_option_chain():
