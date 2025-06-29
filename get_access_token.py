@@ -4,7 +4,7 @@ import requests
 API_KEY = "b2096ceb-fc87-4774-8b45-25f9a55339e6"
 API_SECRET = "n8spbqym2a"
 REDIRECT_URI = "https://127.0.0.1"
-AUTH_CODE = "lUq5oY"  # This must be the full code from ?code=... (check again)
+AUTH_CODE = "A64dRg"  # This must be the full code from ?code=... (check again)
 
 # 📡 Step 2: Upstox token URL
 url = "https://api.upstox.com/v2/login/authorization/token"
