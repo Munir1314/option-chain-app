@@ -8,7 +8,7 @@ st.title("📊 AOC-Style Option Chain Viewer (NIFTY)")
 
 ACCESS_TOKEN = st.secrets["upstox"]["token"]
 INSTRUMENT_KEY = "NSE_INDEX|Nifty 50"
-st_autorefresh(interval=5000, key="refresh")
+st_autorefresh(interval=1000, key="refresh")  # Refresh every second
 
 # 🔁 Fetch Expiries
 @st.cache_data(ttl=300)
@@ -40,21 +40,23 @@ def oi_bar(val, maxval, color):
     width = min(val / maxval * 100, 100) if maxval else 0
     return f"<div style='background:#eee;height:6px;width:100%;'><div style='height:100%;background:{color};width:{width}%;'></div></div>"
 
+# 🔍 Build DataFrame
 def build_df(data):
-    df = pd.DataFrame(data).dropna(subset=["call_options","put_options"])
+    df = pd.DataFrame(data).dropna(subset=["call_options", "put_options"])
     spot = df["underlying_spot_price"].iat[0]
-    st.metric("📍 Spot Price", f"{spot:.2f}")
-    df = df[(df.strike_price.between(spot-800, spot+800))].copy()
+    df = df[df.strike_price.between(spot - 800, spot + 800)].copy()
 
     def extract(opt, side):
         m = opt["market_data"]
-        prev = m.get("prev_oi", 0)
+        prev_oi = m.get("prev_oi", 0)
+        prev_vol = m.get("prev_volume", 0)
         return pd.Series({
             f"{side}_ltp": m.get("ltp", 0),
             f"{side}_oi": m.get("oi", 0),
-            f"{side}_oi_chg": m.get("oi", 0) - prev,
-            f"{side}_oi_pct": percent(m.get("oi", 0), prev),
+            f"{side}_oi_chg": m.get("oi", 0) - prev_oi,
+            f"{side}_oi_pct": percent(m.get("oi", 0), prev_oi),
             f"{side}_volume": m.get("volume", 0),
+            f"{side}_volume_pct": percent(m.get("volume", 0), prev_vol),
             f"{side}_iv": opt.get("option_greeks", {}).get("iv", 0)
         })
 
@@ -64,12 +66,14 @@ def build_df(data):
     res["ATM"] = abs(res.strike - spot).eq(abs(res.strike - spot).min())
     return res, spot
 
+# 🧮 PCR
 def get_pcr(df):
     ce = df.call_oi.sum(); pe = df.put_oi.sum()
     pcr = round(pe / ce, 2) if ce else 0
     trend = "🔼 Bullish" if pcr > 1.1 else ("🔽 Bearish" if pcr < 0.9 else "🔁 Neutral")
     return pcr, trend
 
+# 📊 Render Table
 def render_table(df, exp, spot, pcr, trend):
     st.markdown(f"### Expiry: {exp} | PCR: {pcr} | Trend: {trend}")
 
@@ -81,10 +85,8 @@ def render_table(df, exp, spot, pcr, trend):
     top_ce_vol = sorted(df.call_volume, reverse=True)[:3]
     top_pe_vol = sorted(df.put_volume, reverse=True)[:3]
 
-    def bg(val, top):
-        return "#ff4d4d" if val == top[0] else ("#ffcc00" if val == top[1] else ("#fff176" if val == top[2] else ""))
-    def bgp(val, top):
-        return "#4CAF50" if val == top[0] else ("#ffcc00" if val == top[1] else ("#fff176" if val == top[2] else ""))
+    def bg(val, top): return "#ff4d4d" if val == top[0] else "#ffcc00" if val == top[1] else "#fff176" if val == top[2] else ""
+    def bgp(val, top): return "#4CAF50" if val == top[0] else "#ffcc00" if val == top[1] else "#fff176" if val == top[2] else ""
 
     st.markdown("""
     <style>
@@ -101,17 +103,18 @@ def render_table(df, exp, spot, pcr, trend):
 
     for _, r in df.iterrows():
         atm = " class='atm'" if r.ATM else ""
+        spot_marker = f"← Spot {spot:.2f}" if r.ATM else ""
         html += f"<tr{atm}>"
         html += f"<td>{r.call_iv:.2f}%</td>"
-        html += f"<td style='background:{bg(r.call_oi_chg,top_ce_chg)}'>{fmt(r.call_oi_chg)}<br><small>{r.call_oi_pct}</small></td>"
-        html += f"<td style='background:{bg(r.call_volume,top_ce_vol)}'>{fmt(r.call_volume)}<br><small>{percent(r.call_volume,0)}</small></td>"
-        html += f"<td style='background:{bg(r.call_oi,top_ce_oi)}'>{fmt(r.call_oi)}{oi_bar(r.call_oi,max_ce,'#ff4d4d')}</td>"
+        html += f"<td style='background:{bg(r.call_oi_chg, top_ce_chg)}'>{fmt(r.call_oi_chg)}<br><small>{r.call_oi_pct}</small></td>"
+        html += f"<td style='background:{bg(r.call_volume, top_ce_vol)}'>{fmt(r.call_volume)}<br><small>{r.call_volume_pct}</small></td>"
+        html += f"<td style='background:{bg(r.call_oi, top_ce_oi)}'>{fmt(r.call_oi)}<br><small>{r.call_oi_pct}</small>{oi_bar(r.call_oi, max_ce, '#ff4d4d')}</td>"
         html += f"<td>{r.call_ltp:.2f}</td>"
-        html += f"<td style='background:#f9f9f9'><b>{int(r.strike)}</b></td>"
+        html += f"<td style='background:#f9f9f9'><b>{int(r.strike)}</b><br><small>{spot_marker}</small></td>"
         html += f"<td>{r.put_ltp:.2f}</td>"
-        html += f"<td style='background:{bgp(r.put_oi,top_pe_oi)}'>{fmt(r.put_oi)}{oi_bar(r.put_oi,max_pe,'#4CAF50')}</td>"
-        html += f"<td style='background:{bgp(r.put_volume,top_pe_vol)}'>{fmt(r.put_volume)}<br><small>{percent(r.put_volume,0)}</small></td>"
-        html += f"<td style='background:{bgp(r.put_oi_chg,top_pe_chg)}'>{fmt(r.put_oi_chg)}<br><small>{r.put_oi_pct}</small></td>"
+        html += f"<td style='background:{bgp(r.put_oi, top_pe_oi)}'>{fmt(r.put_oi)}<br><small>{r.put_oi_pct}</small>{oi_bar(r.put_oi, max_pe, '#4CAF50')}</td>"
+        html += f"<td style='background:{bgp(r.put_volume, top_pe_vol)}'>{fmt(r.put_volume)}<br><small>{r.put_volume_pct}</small></td>"
+        html += f"<td style='background:{bgp(r.put_oi_chg, top_pe_chg)}'>{fmt(r.put_oi_chg)}<br><small>{r.put_oi_pct}</small></td>"
         html += f"<td>{r.put_iv:.2f}%</td>"
         html += "</tr>"
     html += "</table></div>"
