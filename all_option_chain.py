@@ -1,85 +1,83 @@
 import requests
 import pandas as pd
+import os
+from datetime import datetime
 
-ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyTkNTVTUiLCJqdGkiOiI2ODYwZDViY2UxNTM3MTIwMThhYjM5NzQiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzUxMTc2NjM2LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3NTEyMzQ0MDB9.6D4-lAVlxbOE25kyoClSSeDhvuRR1OmgneR0i1ei2XA"
+def fetch_and_save_option_chain(index_name, instrument_key, expiry_date, token):
+    url = f"https://api.upstox.com/v2/option/chain?instrument_key={instrument_key}&expiry_date={expiry_date}"
+    headers = {
+        "Authorization": f"Bearer {token}"
+    }
 
-EXPIRY_MAP = {
-    "NIFTY": ("NSE_INDEX|Nifty 50", "2025-07-03"),
-    "BANKNIFTY": ("NSE_INDEX|Bank Nifty", "2025-07-31"),
-    "FINNIFTY": ("NSE_INDEX|Fin Nifty", "2025-07-31"),
-    "MIDCPNIFTY": ("NSE_INDEX|Midcap Nifty", "2025-07-31")
-}
-
-headers = {
-    "accept": "application/json",
-    "Authorization": f"Bearer {ACCESS_TOKEN}"
-}
-
-def fetch_option_chain(index_name, instrument_key, expiry):
-    url = f"https://api.upstox.com/v2/option/chain?instrument_key={instrument_key}&expiry_date={expiry}"
     response = requests.get(url, headers=headers)
-
-    try:
-        data = response.json()
-    except Exception as e:
-        print(f"[ERROR] JSON decoding failed for {index_name}: {e}")
-        print("Raw response:", response.text)
+    if response.status_code != 200:
+        print(f"❌ Failed to fetch data for {index_name}: {response.status_code}")
         return None
 
-    # ✅ Fix: data["data"] is a list of option chain entries
-    if not isinstance(data, dict) or "data" not in data:
-        print(f"[ERROR] Unexpected format for {index_name}")
-        print(data)
+    data = response.json()
+    if "data" not in data:
+        print(f"❌ Invalid response for {index_name}")
         return None
 
     chain_data = data["data"]
-    if not isinstance(chain_data, list) or not chain_data:
-        print(f"[SKIPPED] No option chain data for {index_name}")
+    print(f"\n🔍 Sample data for {index_name}:")
+    if chain_data:
+        print(chain_data[0])
+    else:
+        print("⚠️ No data returned for this index.")
         return None
 
     records = []
     for entry in chain_data:
-        ce = entry.get("call_options", {})
-        pe = entry.get("put_options", {})
+        strike = entry.get("strike_price", 0)
+        ce = entry.get("call_options") or {}
+        pe = entry.get("put_options") or {}
 
-        ce_market = ce.get("market_data", {})
-        pe_market = pe.get("market_data", {})
-        ce_iv = ce.get("option_greeks", {}).get("iv", 0)
-        pe_iv = pe.get("option_greeks", {}).get("iv", 0)
+        ce_market = ce.get("market_data") or {}
+        pe_market = pe.get("market_data") or {}
 
-        ce_oi = ce_market.get("oi", 0)
-        pe_oi = pe_market.get("oi", 0)
-        pcr = round(pe_oi / ce_oi, 2) if ce_oi else None
+        ce_iv = (ce.get("option_greeks") or {}).get("iv", 0)
+        pe_iv = (pe.get("option_greeks") or {}).get("iv", 0)
 
-        records.append({
-            "Index": index_name,
-            "Expiry": entry.get("expiry", expiry),
-            "Strike": entry.get("strike_price", 0),
-            "CE OI": ce_oi,
-            "CE COI": ce_market.get("oi", 0) - ce_market.get("prev_oi", 0),
-            "CE LTP": ce_market.get("ltp", 0),
+        record = {
+            "Strike Price": strike,
+            "CE LTP": ce_market.get("ltp"),
+            "CE OI": ce_market.get("oi"),
+            "CE Volume": ce_market.get("volume"),
+            "CE Change OI": ce_market.get("oi", 0) - ce_market.get("prev_oi", 0),
             "CE IV": ce_iv,
-            "PE OI": pe_oi,
-            "PE COI": pe_market.get("oi", 0) - pe_market.get("prev_oi", 0),
-            "PE LTP": pe_market.get("ltp", 0),
-            "PE IV": pe_iv,
-            "PCR": pcr
-        })
 
-    return pd.DataFrame(records)
+            "PE LTP": pe_market.get("ltp"),
+            "PE OI": pe_market.get("oi"),
+            "PE Volume": pe_market.get("volume"),
+            "PE Change OI": pe_market.get("oi", 0) - pe_market.get("prev_oi", 0),
+            "PE IV": pe_iv
+        }
+        records.append(record)
 
-# 🔁 Loop
-all_data = []
-for index_name, (instrument_key, expiry) in EXPIRY_MAP.items():
-    print(f"📥 Fetching {index_name}...")
-    df = fetch_option_chain(index_name, instrument_key, expiry)
-    if df is not None:
-        all_data.append(df)
+    df = pd.DataFrame(records)
+    df.sort_values("Strike Price", inplace=True)
+    return df
 
-# 💾 Save to Excel
-if all_data:
-    final_df = pd.concat(all_data).sort_values(["Index", "Strike"]).reset_index(drop=True)
-    final_df.to_excel("option_chain_all_indices.xlsx", index=False)
-    print("\n✅ Success! Saved as option_chain_all_indices.xlsx")
-else:
-    print("❌ No data fetched.")
+if __name__ == "__main__":
+    ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiIyTkNTVTUiLCJqdGkiOiI2ODYyMWNiMGM5NTJjNDM5Y2YzZDk5MWQiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzUxMjYwMzM2LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3NTEzMjA4MDB9.eSR40n9lS6MJ06ngyy3hbYC6vpRdLz1zYWGhJNnsOuQ"
+    EXPIRY_DATE = "2025-07-03"
+
+    indices = {
+        "NIFTY": "NSE_INDEX|Nifty 50"
+    }
+
+    writer = pd.ExcelWriter("option_chain_all_indices.xlsx", engine="openpyxl")
+
+    data_written = False
+    for index_name, instrument_key in indices.items():
+        df = fetch_and_save_option_chain(index_name, instrument_key, EXPIRY_DATE, ACCESS_TOKEN)
+        if df is not None and not df.empty:
+            df.to_excel(writer, sheet_name=index_name, index=False)
+            data_written = True
+
+    if not data_written:
+        pd.DataFrame({"Error": ["No valid data fetched."]}).to_excel(writer, sheet_name="ERROR", index=False)
+
+    writer.close()
+    print("✅ Option chain saved to option_chain_all_indices.xlsx")

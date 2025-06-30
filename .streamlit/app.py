@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
 import requests
-import time
+from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(layout="wide")
 st.title("📊 Live Option Chain - NIFTY")
 
 ACCESS_TOKEN = st.secrets["upstox"]["token"]
 INSTRUMENT_KEY = "NSE_INDEX|Nifty 50"
-EXPIRY_DATE = "2025-07-04"  # You can change it later dynamically
+EXPIRY_DATE = "2025-07-04"
 STRIKE_RANGE = st.slider("Strike Range (+/- from ATM)", 5, 30, 10)
 
 def fetch_option_chain():
@@ -21,7 +21,7 @@ def fetch_option_chain():
     if response.status_code == 200:
         return response.json().get("data", [])
     else:
-        st.error("Failed to fetch data")
+        st.error("Failed to fetch data.")
         return []
 
 def build_dataframe(chain_data):
@@ -51,13 +51,13 @@ def build_dataframe(chain_data):
     put_df = pd.DataFrame(puts.tolist())
 
     final_df = pd.concat([call_df, df["strike_price"], put_df], axis=1)
-
     return final_df.sort_values("strike_price")
 
 def highlight_support_resistance(df, side):
     for col in [f"{side}_oi", f"{side}_volume", f"{side}_oi_chg"]:
         top3 = df[col].nlargest(3).index
-        for idx, color in zip(top3, ["red", "orange", "yellow"] if side == "call" else ["green", "yellowgreen", "lightyellow"]):
+        colors = ["red", "orange", "yellow"] if side == "call" else ["green", "yellowgreen", "lightyellow"]
+        for idx, color in zip(top3, colors):
             df.at[idx, f"{side}_highlight"] = color
     return df
 
@@ -81,7 +81,7 @@ def render():
 
     st.dataframe(style, use_container_width=True)
 
-# Auto-refresh every 5 seconds
-st_autorefresh = st.experimental_rerun
-st.experimental_singleton(lambda: time.sleep(5))()
+# ✅ Auto-refresh every 5 seconds
+st_autorefresh(interval=5000, limit=None, key="refresh")
+
 render()
